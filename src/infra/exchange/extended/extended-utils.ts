@@ -1,4 +1,4 @@
-import type { schemas } from "@zheyu/extended";
+import type { schemas } from "@shenzheyu/extended";
 import { Decimal } from "../../../shared/number";
 import type { OrderStatus } from "../../../core/exchange/models";
 

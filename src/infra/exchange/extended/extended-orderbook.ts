@@ -1,5 +1,5 @@
-import { OrderbookTracker, type StreamClient, type Subscription } from "@zheyu/extended";
-import type { schemas } from "@zheyu/extended";
+import { OrderbookTracker, type StreamClient, type Subscription } from "@shenzheyu/extended";
+import type { schemas } from "@shenzheyu/extended";
 import { Decimal } from "../../../shared/number";
 import type { ExchangeQuote } from "../../../core/exchange/models";
 import type { Unsubscribe } from "../../../core/exchange/adapter";

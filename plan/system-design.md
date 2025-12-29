@@ -3,9 +3,9 @@
 ## 目标与约束
 
 - 将 `perp-dex-trader` 的网格交易模块迁移到本仓库并做结构化重构。
-- 交易所对接统一通过 `@zheyu/extended` SDK，同时预留多交易所扩展接口。
+- 交易所对接统一通过 `@shenzheyu/extended` SDK，同时预留多交易所扩展接口。
 - 运行环境为 Node.js，数据库使用 SQLite + Drizzle，仅保留 `orders` 单表。
-- 本地依赖先使用 `@zheyu/extended`（`file:../extended`），后续可平滑切换到 npm 包。
+- 依赖直接使用已发布的 npm 包 `@shenzheyu/extended`，避免本地引用带来的版本漂移。
 - 保持策略行为一致，强调可维护性与可扩展性。
 
 ## 设计原则
@@ -284,7 +284,7 @@ interface GridExchangeAdapter {
   - `pnpm test`：运行 vitest
   - `pnpm lint` / `pnpm format`：Biome 校验与格式化
 - 依赖清单（建议）：
-  - 运行时：`@zheyu/extended`（file 引用）、`bignumber.js`、`dotenv`、`drizzle-orm`、`better-sqlite3`、`zod`
+  - 运行时：`@shenzheyu/extended`、`bignumber.js`、`dotenv`、`drizzle-orm`、`better-sqlite3`、`zod`
   - 开发时：`typescript`、`@types/node`、`vitest`、`biome`、`drizzle-kit`、`tsx`、`esbuild`
 
 ## 可观测性
@@ -297,7 +297,7 @@ interface GridExchangeAdapter {
 - 语言：TypeScript
 - 运行时：Node.js
 - 包管理：pnpm
-- 交易所 SDK：`@zheyu/extended`（本地依赖，后续 npm）
+- 交易所 SDK：`@shenzheyu/extended`（npm 包）
 - 数据库：SQLite
 - ORM：Drizzle
 - 配置：`.env` + 配置加载器

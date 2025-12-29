@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@zheyu/extended':
-        specifier: file:../extended
-        version: file:../extended
+      '@shenzheyu/extended':
+        specifier: 0.0.1-alpha.0
+        version: 0.0.1-alpha.0
       better-sqlite3:
         specifier: ^12.5.0
         version: 12.5.0
@@ -703,6 +703,10 @@ packages:
   '@scure/starknet@1.1.0':
     resolution: {integrity: sha512-83g3M6Ix2qRsPN4wqLDqiRZ2GBNbjVWfboJE/9UjfG+MHr6oDSu/CWgy8hsBSJejr09DkkL+l0Ze4KVrlCIdtQ==}
 
+  '@shenzheyu/extended@0.0.1-alpha.0':
+    resolution: {integrity: sha512-c57Va8JbvO8uwQsQCeLz0XSom8MqNvb8TesnCUrbW1ZoPBCqtUpeeKZGx/JZL/Djfg/U1iS613tpwNThv8/oww==}
+    engines: {node: '>=18'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -761,10 +765,6 @@ packages:
 
   '@x10xchange/stark-crypto-wrapper-wasm@0.1.6':
     resolution: {integrity: sha512-/zKAb/6Bwh9UT4QQmLjvreDDuQ1wyvAx+8dp+tpK6kl01EF/OspDM8jzWzyh4Ad5/YwoRkFAi+hOWAbkYhMLXQ==}
-
-  '@zheyu/extended@file:../extended':
-    resolution: {directory: ../extended, type: directory}
-    engines: {node: '>=18'}
 
   abi-wan-kanabi@2.2.4:
     resolution: {integrity: sha512-0aA81FScmJCPX+8UvkXLki3X1+yPQuWxEkqXBVKltgPAK79J+NB+Lp5DouMXa7L6f+zcRlIA/6XO7BN/q9fnvg==}
@@ -1741,6 +1741,18 @@ snapshots:
       '@noble/curves': 1.7.0
       '@noble/hashes': 1.6.1
 
+  '@shenzheyu/extended@0.0.1-alpha.0':
+    dependencies:
+      '@x10xchange/stark-crypto-wrapper-wasm': 0.1.6
+      bignumber.js: 9.3.1
+      ethers: 6.15.0
+      starknet: 8.5.4
+      ws: 8.18.0
+      zod: 4.1.11
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@standard-schema/spec@1.1.0': {}
 
   '@starknet-io/types-js@0.8.4': {}
@@ -1808,18 +1820,6 @@ snapshots:
       tinyrainbow: 3.0.3
 
   '@x10xchange/stark-crypto-wrapper-wasm@0.1.6': {}
-
-  '@zheyu/extended@file:../extended':
-    dependencies:
-      '@x10xchange/stark-crypto-wrapper-wasm': 0.1.6
-      bignumber.js: 9.3.1
-      ethers: 6.15.0
-      starknet: 8.5.4
-      ws: 8.18.0
-      zod: 4.1.11
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   abi-wan-kanabi@2.2.4:
     dependencies:

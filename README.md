@@ -6,6 +6,10 @@
 - 构建运行：`pnpm build` 后执行 `pnpm start`
 - 退出流程：支持 `SIGINT` / `SIGTERM`，收到信号后会停止编排、断开交易所并关闭数据库
 
+## 交易所 SDK
+
+- 交易所对接统一使用 npm 包 `@shenzheyu/extended`。
+
 ## 运行编排与健康检查
 
 - 运行编排由 `GridOrchestrator` 统一驱动，负责维护调度（撤单超时与对账）与健康检查输出。

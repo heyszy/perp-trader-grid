@@ -1,5 +1,5 @@
-import { createOrderRequest, type StarknetDomain, type Subscription } from "@zheyu/extended";
-import type { schemas } from "@zheyu/extended";
+import { createOrderRequest, type StarknetDomain, type Subscription } from "@shenzheyu/extended";
+import type { schemas } from "@shenzheyu/extended";
 import type {
   AccountSubscribeParams,
   GridExchangeAdapter,

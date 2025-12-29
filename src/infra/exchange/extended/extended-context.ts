@@ -1,4 +1,4 @@
-import type { PrivateClient, PublicClient, schemas } from "@zheyu/extended";
+import type { PrivateClient, PublicClient, schemas } from "@shenzheyu/extended";
 
 /**
  * 获取当前 API Key 对应的账户信息。

@@ -8,7 +8,7 @@ import {
   STARKNET_TESTNET,
   StarknetSigner,
   type EndpointConfig,
-} from "@zheyu/extended";
+} from "@shenzheyu/extended";
 import type { ExtendedConfig } from "../../config/schema";
 
 export interface ExtendedApiClients {
