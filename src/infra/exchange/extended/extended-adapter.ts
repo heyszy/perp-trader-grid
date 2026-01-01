@@ -22,6 +22,7 @@ import { createExtendedClients, type ExtendedApiClients } from "./extended-clien
 import { ExtendedOrderbookStream } from "./extended-orderbook";
 import { BUILDER_FEE_CAP, BUILDER_ID, normalizeOrderStatus, roundToStep } from "./extended-utils";
 import { extendedSymbolMapper } from "./extended-symbol-mapper";
+import { extractRetryAfterMs, isRateLimitError, RateLimitGuard } from "./extended-rate-limit";
 
 /**
  * Extended 交易所适配器实现。
@@ -42,6 +43,8 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
   private fees: schemas.Fees | null = null;
   private starknetDomain: StarknetDomain | null = null;
   private connectPromise: Promise<void> | null = null;
+  // REST 请求全局限流守卫，避免 429 时继续高频打点。
+  private readonly rateLimitGuard = new RateLimitGuard();
 
   constructor(config: ExtendedConfig, symbol: string) {
     this.symbol = symbol;
@@ -64,9 +67,15 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
       return this.connectPromise;
     }
     this.connectPromise = (async () => {
-      this.accountInfo = await loadAccountInfo(this.clients.privateClient);
-      this.marketInfo = await loadMarketInfo(this.clients.publicClient, this.marketName);
-      this.fees = await loadFees(this.clients.privateClient, this.marketName, BUILDER_ID);
+      this.accountInfo = await this.withRateLimit(() =>
+        loadAccountInfo(this.clients.privateClient)
+      );
+      this.marketInfo = await this.withRateLimit(() =>
+        loadMarketInfo(this.clients.publicClient, this.marketName)
+      );
+      this.fees = await this.withRateLimit(() =>
+        loadFees(this.clients.privateClient, this.marketName, BUILDER_ID)
+      );
       this.starknetDomain = this.clients.endpoint.starknetDomain ?? null;
     })();
     try {
@@ -227,9 +236,11 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
   public async getNetPosition(symbol: string): Promise<Decimal> {
     this.ensureSymbol(symbol);
     await this.connect();
-    const positions = await this.clients.privateClient.account.getPositions({
-      market: [this.marketName],
-    });
+    const positions = await this.withRateLimit(() =>
+      this.clients.privateClient.account.getPositions({
+        market: [this.marketName],
+      })
+    );
     const position = positions.find((item) => item.market === this.marketName);
     if (!position) {
       return Decimal(0);
@@ -246,7 +257,9 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
    */
   public async getOrderByClientOrderId(clientOrderId: string): Promise<ExchangeOrder | null> {
     await this.connect();
-    const orders = await this.clients.privateClient.orders.getOrdersByExternalId(clientOrderId);
+    const orders = await this.withRateLimit(() =>
+      this.clients.privateClient.orders.getOrdersByExternalId(clientOrderId)
+    );
     const matches = orders.filter((order) => order.market === this.marketName);
     if (matches.length === 0) {
       return null;
@@ -263,9 +276,11 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
   public async getOpenOrders(symbol: string): Promise<ExchangeOrder[]> {
     this.ensureSymbol(symbol);
     await this.connect();
-    const orders = await this.clients.privateClient.orders.getOpenOrders({
-      market: [this.marketName],
-    });
+    const orders = await this.withRateLimit(() =>
+      this.clients.privateClient.orders.getOpenOrders({
+        market: [this.marketName],
+      })
+    );
     return orders.map((order) => this.mapExchangeOrder(order));
   }
 
@@ -275,10 +290,12 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
   public async getOrdersHistory(query: OrderHistoryQuery): Promise<ExchangeOrder[]> {
     this.ensureSymbol(query.symbol);
     await this.connect();
-    const result = await this.clients.privateClient.orders.getOrdersHistory({
-      market: [this.marketName],
-      limit: 100,
-    });
+    const result = await this.withRateLimit(() =>
+      this.clients.privateClient.orders.getOrdersHistory({
+        market: [this.marketName],
+        limit: 100,
+      })
+    );
     const cutoff = query.sinceMs;
     return result.data
       .filter((order) => order.updatedTime >= cutoff)
@@ -338,7 +355,9 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
       starknetDomain: this.starknetDomain,
     });
 
-    const result = await this.clients.privateClient.orders.placeOrder(orderRequest);
+    const result = await this.withRateLimit(() =>
+      this.clients.privateClient.orders.placeOrder(orderRequest)
+    );
     return {
       status: "ACKED",
       exchangeOrderId: String(result.id),
@@ -351,7 +370,9 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
    */
   public async cancelOrderByExternalId(externalId: string): Promise<void> {
     await this.connect();
-    await this.clients.privateClient.orders.cancelOrderByExternalId(externalId);
+    await this.withRateLimit(() =>
+      this.clients.privateClient.orders.cancelOrderByExternalId(externalId)
+    );
   }
 
   /**
@@ -360,9 +381,28 @@ export class ExtendedGridExchangeAdapter implements GridExchangeAdapter {
   public async massCancel(symbol: string): Promise<void> {
     this.ensureSymbol(symbol);
     await this.connect();
-    await this.clients.privateClient.orders.massCancel({
-      markets: [this.marketName],
-    });
+    await this.withRateLimit(() =>
+      this.clients.privateClient.orders.massCancel({
+        markets: [this.marketName],
+      })
+    );
+  }
+
+  /**
+   * 统一封装 REST 调用，遇到 429 时自动进入退避窗口。
+   */
+  private async withRateLimit<T>(action: () => Promise<T>): Promise<T> {
+    await this.rateLimitGuard.wait();
+    try {
+      const result = await action();
+      this.rateLimitGuard.onSuccess();
+      return result;
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        this.rateLimitGuard.onRateLimit(extractRetryAfterMs(error));
+      }
+      throw error;
+    }
   }
 
   private ensureSymbol(symbol: string): void {
