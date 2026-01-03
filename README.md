@@ -8,12 +8,28 @@
 
 ## 交易所 SDK
 
-- 交易所对接统一使用 npm 包 `@shenzheyu/extended`。
+- Extended 对接使用 npm 包 `@shenzheyu/extended`。
+- Nado 对接使用 npm 包 `@nadohq/client`（对接中）。
+
+## Nado 配置（inkMainnet）
+
+- 切换交易所：`EXCHANGE=nado`
+- RPC 地址：`NADO_RPC_URL=https://rpc-gel.inkonchain.com`
+- 交易私钥：`NADO_PRIVATE_KEY=...`
+- 子账户列表：`NADO_SUBACCOUNT_NAMES=default,sub1`
+
+`NADO_SUBACCOUNT_NAMES` 支持逗号分隔，未填写时默认 `default`。
+
+## Nado 数量精度
+
+- Nado 返回的订单数量与成交数量为 x18 精度，系统会转换为实际数量后落库。
+- Nado 事件时间戳可能为秒/毫秒/微秒/纳秒，已统一归一化为毫秒。
 
 ## 运行编排与健康检查
 
 - 运行编排由 `GridOrchestrator` 统一驱动，负责维护调度（撤单超时与对账）与健康检查输出。
 - 健康检查默认每 10 秒执行一次，仅在异常时输出 warning。
+- 启动初期允许短暂无行情更新，避免误报。
 - REST 请求遇到 429 时会进入退避窗口，减少短时间内的重复请求。
 
 ## PM2 部署

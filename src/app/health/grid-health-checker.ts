@@ -6,6 +6,8 @@ import type { GridRuntime } from "../grid-runtime";
 export interface GridHealthThresholds {
   /** 行情过期阈值 */
   marketStaleMs: number;
+  /** 启动后允许无行情的宽限时间 */
+  marketMissingGraceMs: number;
   /** 仓位更新过期阈值 */
   positionStaleMs: number;
   /** 维护任务过期阈值 */
@@ -41,6 +43,7 @@ export interface GridHealthReport {
 
 const DEFAULT_THRESHOLDS: GridHealthThresholds = {
   marketStaleMs: 15000,
+  marketMissingGraceMs: 15000,
   positionStaleMs: 60000,
   maintenanceStaleMs: 5000,
   reconcileStaleMs: 15000,
@@ -52,10 +55,13 @@ const DEFAULT_THRESHOLDS: GridHealthThresholds = {
 export class GridHealthChecker {
   private readonly runtime: GridRuntime;
   private readonly thresholds: GridHealthThresholds;
+  // 记录健康检查器启动时间，用于过滤启动初期的无行情告警。
+  private readonly startedAt: number;
 
   constructor(runtime: GridRuntime, thresholds?: Partial<GridHealthThresholds>) {
     this.runtime = runtime;
     this.thresholds = { ...DEFAULT_THRESHOLDS, ...thresholds };
+    this.startedAt = Date.now();
   }
 
   /**
@@ -75,7 +81,10 @@ export class GridHealthChecker {
 
     const warnings: string[] = [];
     if (quoteAgeMs === null) {
-      warnings.push("暂无行情更新");
+      const uptimeMs = now - this.startedAt;
+      if (uptimeMs > this.thresholds.marketMissingGraceMs) {
+        warnings.push("暂无行情更新");
+      }
     } else if (quoteAgeMs > this.thresholds.marketStaleMs) {
       warnings.push(`行情更新过期: ${quoteAgeMs}ms`);
     }

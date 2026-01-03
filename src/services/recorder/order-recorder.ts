@@ -12,6 +12,8 @@ export interface OrderRecordInput {
   symbol: string;
   exchangeSymbol: string;
   clientOrderId: string;
+  /** 客户端自定义的数值订单号，用于事件回传关联 */
+  clientOrderNum?: number;
   exchangeOrderId?: string;
   side: OrderSide;
   orderType: "LIMIT" | "MARKET";
@@ -59,6 +61,7 @@ export class DbOrderRecorder implements OrderRecorder {
       symbol: input.symbol,
       exchangeSymbol: input.exchangeSymbol,
       clientOrderId: input.clientOrderId,
+      clientOrderNum: input.clientOrderNum,
       exchangeOrderId: input.exchangeOrderId,
       side: input.side,
       orderType: input.orderType,

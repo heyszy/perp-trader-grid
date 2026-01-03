@@ -10,20 +10,32 @@ import { DbOrderRecorder } from "../services/recorder/order-recorder";
  * 脱敏输出配置，避免日志泄露敏感信息。
  */
 function maskConfig(config: AppConfig): AppConfig {
-  if (config.exchange.name !== "extended" || !config.exchange.extended) {
-    return config;
-  }
-  return {
-    ...config,
-    exchange: {
-      ...config.exchange,
-      extended: {
-        ...config.exchange.extended,
-        apiKey: "***",
-        l2PrivateKey: "***",
+  if (config.exchange.name === "extended" && config.exchange.extended) {
+    return {
+      ...config,
+      exchange: {
+        ...config.exchange,
+        extended: {
+          ...config.exchange.extended,
+          apiKey: "***",
+          l2PrivateKey: "***",
+        },
       },
-    },
-  };
+    };
+  }
+  if (config.exchange.name === "nado" && config.exchange.nado) {
+    return {
+      ...config,
+      exchange: {
+        ...config.exchange,
+        nado: {
+          ...config.exchange.nado,
+          privateKey: "***",
+        },
+      },
+    };
+  }
+  return config;
 }
 
 /**

@@ -62,6 +62,8 @@ export interface ExchangeOrder {
   /** 交易所账户标识，便于多账户对账 */
   accountId?: string;
   clientOrderId: string;
+  /** 客户端自定义的数值订单号，用于事件回传关联 */
+  clientOrderNum?: number;
   exchangeOrderId?: string;
   status: OrderStatus;
   statusReason?: string;
@@ -83,6 +85,8 @@ export interface OrderUpdate {
   /** 交易所账户标识，便于多账户对账 */
   accountId?: string;
   clientOrderId: string;
+  /** 客户端自定义的数值订单号，用于事件回传关联 */
+  clientOrderNum?: number;
   exchangeOrderId?: string;
   status: OrderStatus;
   statusReason?: string;

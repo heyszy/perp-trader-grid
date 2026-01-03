@@ -43,6 +43,8 @@ export const orders = sqliteTable(
     symbol: text("symbol").notNull(),
     exchangeSymbol: text("exchange_symbol").notNull(),
     clientOrderId: text("client_order_id").notNull(),
+    // 客户端自定义的数值订单号，用于事件回传关联
+    clientOrderNum: integer("client_order_num"),
     exchangeOrderId: text("exchange_order_id"),
     side: text("side", { enum: orderSideEnum }).notNull(),
     orderType: text("order_type", { enum: orderTypeEnum }).notNull(),

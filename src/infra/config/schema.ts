@@ -3,9 +3,9 @@ import type { GridSpacingMode } from "../../core/grid/types";
 
 /**
  * 支持的交易所名称。
- * 目前仅支持 extended，后续新增交易所需在此扩展。
+ * 当前已接入 extended，nado 配置预留用于后续对接。
  */
-export type ExchangeName = "extended";
+export type ExchangeName = "extended" | "nado";
 
 /**
  * 网格配置，包含策略与风控所需的全部参数。
@@ -45,11 +45,24 @@ export interface ExtendedConfig {
 }
 
 /**
+ * Nado 账户与网络配置。
+ */
+export interface NadoConfig {
+  /** INK 主网 RPC 地址，用于构建 viem 客户端 */
+  rpcUrl: string;
+  /** 钱包私钥，用于签名订单 */
+  privateKey: string;
+  /** 需要订阅与交易的子账户名称列表 */
+  subaccountNames: string[];
+}
+
+/**
  * 交易所配置。
  */
 export interface ExchangeConfig {
   name: ExchangeName;
   extended?: ExtendedConfig;
+  nado?: NadoConfig;
 }
 
 /**

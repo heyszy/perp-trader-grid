@@ -27,6 +27,8 @@ export class GridOrderManager {
   private readonly strategy: GridStrategy;
   private readonly state: GridState;
   private readonly orderIdPrefix: string;
+  // 每次进程启动生成的会话标识，用于避免 clientOrderId 重启重复。
+  private readonly orderSessionId: string;
   private readonly exchangeSymbol: string;
   private quoteUnsubscribe: Unsubscribe | null = null;
   private accountUnsubscribe: Unsubscribe | null = null;
@@ -85,6 +87,7 @@ export class GridOrderManager {
       symbol: config.symbol,
     });
     this.orderIdPrefix = `${config.strategyId}-${config.symbol}-`;
+    this.orderSessionId = this.buildOrderSessionId();
     this.exchangeSymbol = this.exchange.resolveExchangeSymbol(this.config.symbol);
   }
 
@@ -364,6 +367,7 @@ export class GridOrderManager {
     if (!this.recorder) {
       return;
     }
+    const timeInForce = extra?.timeInForce ?? "GTT";
     const payload: OrderRecordInput = {
       strategyId: this.config.strategyId,
       exchange: this.exchange.name,
@@ -371,10 +375,12 @@ export class GridOrderManager {
       symbol: this.config.symbol,
       exchangeSymbol: this.exchangeSymbol,
       clientOrderId: order.clientOrderId,
+      clientOrderNum: extra?.clientOrderNum,
       exchangeOrderId: extra?.exchangeOrderId ?? order.exchangeOrderId,
       side: order.side,
       orderType: "LIMIT",
-      timeInForce: undefined,
+      // 网格单均携带过期时间，视为 GTT。
+      timeInForce,
       postOnly: this.config.postOnly,
       reduceOnly: false,
       price: order.price,
@@ -399,6 +405,7 @@ export class GridOrderManager {
   private buildRecordExtraFromUpdate(update: OrderUpdate): OrderRecordExtra {
     return {
       accountId: update.accountId,
+      clientOrderNum: update.clientOrderNum,
       exchangeOrderId: update.exchangeOrderId,
       exchangeStatus: update.exchangeStatus,
       statusReason: update.statusReason,
@@ -414,6 +421,7 @@ export class GridOrderManager {
   private buildRecordExtraFromExchange(order: ExchangeOrder): OrderRecordExtra {
     return {
       accountId: order.accountId,
+      clientOrderNum: order.clientOrderNum,
       exchangeOrderId: order.exchangeOrderId,
       exchangeStatus: order.exchangeStatus,
       statusReason: order.statusReason,
@@ -585,7 +593,12 @@ export class GridOrderManager {
         status: result.status,
         updatedAt: result.updatedAt,
       };
-      this.upsertOrderState(updated);
+      this.upsertOrderState(updated, {
+        accountId: result.accountId,
+        clientOrderNum: result.clientOrderNum,
+        exchangeOrderId: result.exchangeOrderId,
+        timeInForce: "GTT",
+      });
       return updated;
     } catch (error) {
       console.warn("下单失败", error);
@@ -621,7 +634,7 @@ export class GridOrderManager {
    */
   private nextClientOrderId(level: GridLevel): string {
     const sequence = this.orderSequence++;
-    return `${this.orderIdPrefix}${level.targetSide}-${level.index}-${sequence}`;
+    return `${this.orderIdPrefix}${level.targetSide}-${level.index}-${sequence}-${this.orderSessionId}`;
   }
 
   /**
@@ -662,11 +675,17 @@ export class GridOrderManager {
     try {
       const latest = await this.exchange.getOrderByClientOrderId(order.clientOrderId);
       if (!latest) {
-        this.upsertOrderState({
-          ...order,
-          status: "UNKNOWN",
-          updatedAt: Date.now(),
-        });
+        this.upsertOrderState(
+          {
+            ...order,
+            status: "CANCELLED",
+            updatedAt: Date.now(),
+          },
+          {
+            exchangeStatus: "not_found",
+            statusReason: "ORDER_NOT_FOUND",
+          }
+        );
         return;
       }
       this.upsertOrderState(
@@ -758,12 +777,21 @@ export class GridOrderManager {
       return null;
     }
     const rest = clientOrderId.slice(this.orderIdPrefix.length);
-    const match = rest.match(/^(BUY|SELL)-(-?\\d+)-\\d+$/);
+    const match = rest.match(/^(BUY|SELL)-(-?\\d+)-\\d+(?:-.+)?$/);
     if (!match) {
       return null;
     }
     const index = Number(match[2]);
     return Number.isFinite(index) ? index : null;
+  }
+
+  /**
+   * 生成订单会话标识，避免重启后 clientOrderId 重复。
+   */
+  private buildOrderSessionId(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).slice(2, 8);
+    return `${timestamp}-${random}`;
   }
 
   /**
@@ -874,6 +902,10 @@ export interface GridOrderManagerStatus {
  */
 type OrderRecordExtra = {
   accountId?: string;
+  /** 客户端自定义的数值订单号，用于事件回传关联 */
+  clientOrderNum?: number;
+  /** 订单有效期类型，用于落库 */
+  timeInForce?: "GTT" | "IOC" | "FOK" | "GTC";
   exchangeOrderId?: string;
   exchangeStatus?: string;
   statusReason?: string;

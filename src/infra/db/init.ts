@@ -13,6 +13,7 @@ export function ensureDbSchema(sqlite: Database.Database): void {
       symbol TEXT NOT NULL,
       exchange_symbol TEXT NOT NULL,
       client_order_id TEXT NOT NULL,
+      client_order_num INTEGER,
       exchange_order_id TEXT,
       side TEXT NOT NULL,
       order_type TEXT NOT NULL,
@@ -45,4 +46,13 @@ export function ensureDbSchema(sqlite: Database.Database): void {
     CREATE INDEX IF NOT EXISTS orders_exchange_symbol_status
       ON orders (exchange, symbol, status);
   `);
+
+  // 兼容旧表结构，补齐 client_order_num 字段
+  const columns = sqlite.prepare("PRAGMA table_info(orders)").all() as Array<{
+    name: string;
+  }>;
+  const hasClientOrderNum = columns.some((column) => column.name === "client_order_num");
+  if (!hasClientOrderNum) {
+    sqlite.exec("ALTER TABLE orders ADD COLUMN client_order_num INTEGER");
+  }
 }

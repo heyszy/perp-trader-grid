@@ -200,6 +200,20 @@ function optionalBooleanField(key: string, defaultValue: boolean) {
 }
 
 /**
+ * 解析子账户名称列表，支持逗号分隔，空值时回退为 default。
+ */
+function parseSubaccountNames(value: string | undefined): string[] {
+  if (!value) {
+    return ["default"];
+  }
+  const names = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return names.length > 0 ? names : ["default"];
+}
+
+/**
  * 交易所名称校验，统一为小写并提供默认值。
  */
 function exchangeNameField() {
@@ -215,7 +229,7 @@ function exchangeNameField() {
         }
         return trimmed.toLowerCase();
       },
-      z.enum(["extended"], "暂不支持交易所")
+      z.enum(["extended", "nado"], "暂不支持交易所")
     )
     .default("extended");
 }
@@ -247,8 +261,8 @@ const envSchema = z
     GRID_MAX_POSITION: decimalField("GRID_MAX_POSITION", { minInclusive: 0 }),
     GRID_MAX_OPEN_ORDERS: intField("GRID_MAX_OPEN_ORDERS", 1),
     EXCHANGE: exchangeNameField(),
-    EXTENDED_API_KEY: requiredString("EXTENDED_API_KEY"),
-    EXTENDED_L2_PRIVATE_KEY: requiredString("EXTENDED_L2_PRIVATE_KEY"),
+    EXTENDED_API_KEY: optionalString(),
+    EXTENDED_L2_PRIVATE_KEY: optionalString(),
     EXTENDED_NETWORK: optionalString()
       .default("mainnet")
       .transform((value, ctx) => {
@@ -262,6 +276,9 @@ const envSchema = z
         }
         return normalized as "mainnet" | "testnet";
       }),
+    NADO_PRIVATE_KEY: optionalString(),
+    NADO_RPC_URL: optionalString().default("https://rpc-gel.inkonchain.com"),
+    NADO_SUBACCOUNT_NAMES: optionalString().default("default"),
     DB_PATH: optionalString().default("data/perp-grid.db"),
     DEBUG_MARKET_LOG: optionalBooleanField("DEBUG_MARKET_LOG", false),
     BARK_SERVER: optionalString(),
@@ -280,6 +297,27 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: "GRID_SPACING_MODE=PERCENT 时必须提供 GRID_SPACING_PERCENT",
         path: ["GRID_SPACING_PERCENT"],
+      });
+    }
+    if (data.EXCHANGE === "extended" && !data.EXTENDED_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "EXCHANGE=extended 时必须提供 EXTENDED_API_KEY",
+        path: ["EXTENDED_API_KEY"],
+      });
+    }
+    if (data.EXCHANGE === "extended" && !data.EXTENDED_L2_PRIVATE_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "EXCHANGE=extended 时必须提供 EXTENDED_L2_PRIVATE_KEY",
+        path: ["EXTENDED_L2_PRIVATE_KEY"],
+      });
+    }
+    if (data.EXCHANGE === "nado" && !data.NADO_PRIVATE_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "EXCHANGE=nado 时必须提供 NADO_PRIVATE_KEY",
+        path: ["NADO_PRIVATE_KEY"],
       });
     }
   });
@@ -337,15 +375,30 @@ function loadGridConfig(env: EnvValues): GridConfig {
 }
 
 /**
- * 构建交易所配置，目前仅支持 extended。
+ * 构建交易所配置，按交易所类型组装对应配置。
  */
 function loadExchangeConfig(env: EnvValues): ExchangeConfig {
+  if (env.EXCHANGE === "extended") {
+    // Extended 凭据已在环境校验阶段保证存在。
+    const extendedApiKey = env.EXTENDED_API_KEY as string;
+    const extendedL2PrivateKey = env.EXTENDED_L2_PRIVATE_KEY as string;
+    return {
+      name: env.EXCHANGE,
+      extended: {
+        apiKey: extendedApiKey,
+        l2PrivateKey: extendedL2PrivateKey,
+        network: env.EXTENDED_NETWORK,
+      },
+    };
+  }
+  // Nado 私钥已在环境校验阶段保证存在。
+  const nadoPrivateKey = env.NADO_PRIVATE_KEY as string;
   return {
     name: env.EXCHANGE,
-    extended: {
-      apiKey: env.EXTENDED_API_KEY,
-      l2PrivateKey: env.EXTENDED_L2_PRIVATE_KEY,
-      network: env.EXTENDED_NETWORK,
+    nado: {
+      rpcUrl: env.NADO_RPC_URL,
+      privateKey: nadoPrivateKey,
+      subaccountNames: parseSubaccountNames(env.NADO_SUBACCOUNT_NAMES),
     },
   };
 }

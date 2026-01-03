@@ -69,6 +69,10 @@ export interface PlaceOrderRequest {
  */
 export interface PlaceOrderResult {
   status: OrderStatus;
+  /** 交易所账户标识（如子账户名），便于落库 */
+  accountId?: string;
+  /** 客户端自定义的数值订单号，用于事件回传关联 */
+  clientOrderNum?: number;
   exchangeOrderId?: string;
   statusReason?: string;
   errorCode?: string;
