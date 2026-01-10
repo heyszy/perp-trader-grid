@@ -26,6 +26,8 @@ export class ExtendedOrderbookStream {
   private orderbookResubscribeTimer: ReturnType<typeof setTimeout> | null = null;
   private markResubscribeTimer: ReturnType<typeof setTimeout> | null = null;
   private active = false;
+  // 订单簿订阅版本号，用于屏蔽旧订阅残留消息。
+  private orderbookToken = 0;
 
   constructor(streamClient: StreamClient, market: string, exchangeName: string) {
     this.streamClient = streamClient;
@@ -56,9 +58,11 @@ export class ExtendedOrderbookStream {
     await this.unsubscribeOrderbook();
     this.tracker.reset();
     try {
+      // 每次重建订阅都生成新 token，旧订阅消息会被直接忽略。
+      const token = this.nextOrderbookToken();
       this.orderbookSub = await this.streamClient.stream.orderbooks(
         this.market,
-        (message) => this.handleOrderbook(message, onQuote),
+        (message) => this.handleOrderbook(message, onQuote, token),
         1
       );
       this.orderbookSub.failureSignal.addEventListener("abort", () => {
@@ -114,8 +118,13 @@ export class ExtendedOrderbookStream {
     }
   }
 
-  private handleOrderbook(message: schemas.OrderbookMessage, onQuote: QuoteListener): void {
-    if (!this.active) {
+  private handleOrderbook(
+    message: schemas.OrderbookMessage,
+    onQuote: QuoteListener,
+    token: number
+  ): void {
+    // 订阅切换后可能收到旧消息，直接丢弃避免触发序列异常。
+    if (!this.active || token !== this.orderbookToken) {
       return;
     }
     try {
@@ -164,6 +173,8 @@ export class ExtendedOrderbookStream {
     if (!this.active || this.orderbookResubscribeTimer) {
       return;
     }
+    // 立即失效旧订阅，减少旧消息混入窗口。
+    this.invalidateOrderbookState();
     console.warn(`订单簿即将重订阅: ${reason}`);
     this.orderbookResubscribeTimer = setTimeout(() => {
       this.orderbookResubscribeTimer = null;
@@ -191,5 +202,18 @@ export class ExtendedOrderbookStream {
       clearTimeout(this.markResubscribeTimer);
       this.markResubscribeTimer = null;
     }
+  }
+
+  private nextOrderbookToken(): number {
+    this.orderbookToken += 1;
+    return this.orderbookToken;
+  }
+
+  private invalidateOrderbookState(): void {
+    // 让旧订阅回调立即失效，同时清理订单簿状态避免继续产出旧报价。
+    this.orderbookToken += 1;
+    this.tracker.reset();
+    this.lastBook = null;
+    void this.unsubscribeOrderbook();
   }
 }
