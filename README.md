@@ -59,6 +59,7 @@ perp-trader-grid 是一个网格交易机器人，支持 Nado、Extended 与 Hyp
 
 - 网络：`HYPERLIQUID_NETWORK=mainnet`（或 `testnet`）
 - 交易私钥：`HYPERLIQUID_PRIVATE_KEY=...`
+- 账户地址：`HYPERLIQUID_USER_ADDRESS=...`（使用 agent key 或子账户时必须填主账户/子账户地址，用于 Info 端点查询）
 - 可选 DEX 名称：`HYPERLIQUID_DEX=`（默认留空使用主 DEX）
 - 最小下单金额（USD）：`HYPERLIQUID_MIN_NOTIONAL=10`（可按需调整）
 - Builder DEX 交易对说明：当需要交易 Builder DEX 资产时，需要提供 `HYPERLIQUID_DEX`（小写），并确保交易对使用 `dex:ASSET` 形式。

@@ -65,6 +65,25 @@ function optionalString() {
 }
 
 /**
+ * 可选地址字段校验，要求 0x 开头且长度为 42。
+ */
+function optionalAddressField(key: string) {
+  return optionalString().transform((value, ctx) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `环境变量 ${key} 不是有效地址: ${value}`,
+      });
+      return z.NEVER;
+    }
+    return value;
+  });
+}
+
+/**
  * 整数字段校验，支持设置最小值。
  */
 function intField(key: string, minValue: number) {
@@ -72,14 +91,14 @@ function intField(key: string, minValue: number) {
     const parsed = Number(value);
     if (!Number.isInteger(parsed)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 不是有效整数: ${value}`,
       });
       return z.NEVER;
     }
     if (parsed < minValue) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 必须大于等于 ${minValue}: ${parsed}`,
       });
       return z.NEVER;
@@ -96,21 +115,21 @@ function decimalField(key: string, options: { minInclusive?: number; minExclusiv
     const decimal = Decimal(value);
     if (decimal.isNaN()) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 不是有效数字: ${value}`,
       });
       return z.NEVER;
     }
     if (options.minExclusive !== undefined && decimal.lte(options.minExclusive)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 必须大于 ${options.minExclusive}: ${value}`,
       });
       return z.NEVER;
     }
     if (options.minInclusive !== undefined && decimal.lt(options.minInclusive)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 必须大于等于 ${options.minInclusive}: ${value}`,
       });
       return z.NEVER;
@@ -133,21 +152,21 @@ function optionalDecimalField(
     const decimal = Decimal(value);
     if (decimal.isNaN()) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 不是有效数字: ${value}`,
       });
       return z.NEVER;
     }
     if (options.minExclusive !== undefined && decimal.lte(options.minExclusive)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 必须大于 ${options.minExclusive}: ${value}`,
       });
       return z.NEVER;
     }
     if (options.minInclusive !== undefined && decimal.lt(options.minInclusive)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `环境变量 ${key} 必须大于等于 ${options.minInclusive}: ${value}`,
       });
       return z.NEVER;
@@ -169,7 +188,7 @@ function booleanField(key: string) {
       return false;
     }
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       message: `环境变量 ${key} 不是有效布尔值: ${value}`,
     });
     return z.NEVER;
@@ -192,7 +211,7 @@ function optionalBooleanField(key: string, defaultValue: boolean) {
       return false;
     }
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       message: `环境变量 ${key} 不是有效布尔值: ${value}`,
     });
     return z.NEVER;
@@ -246,7 +265,7 @@ const envSchema = z
       const normalized = value.toUpperCase();
       if (normalized !== "ABS" && normalized !== "PERCENT") {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `GRID_SPACING_MODE 仅支持 ABS 或 PERCENT: ${value}`,
         });
         return z.NEVER;
@@ -269,7 +288,7 @@ const envSchema = z
         const normalized = value.toLowerCase();
         if (normalized !== "mainnet" && normalized !== "testnet") {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: `EXTENDED_NETWORK 仅支持 mainnet 或 testnet: ${value}`,
           });
           return z.NEVER;
@@ -280,13 +299,14 @@ const envSchema = z
     NADO_RPC_URL: optionalString().default("https://rpc-gel.inkonchain.com"),
     NADO_SUBACCOUNT_NAMES: optionalString().default("default"),
     HYPERLIQUID_PRIVATE_KEY: optionalString(),
+    HYPERLIQUID_USER_ADDRESS: optionalAddressField("HYPERLIQUID_USER_ADDRESS"),
     HYPERLIQUID_NETWORK: optionalString()
       .default("mainnet")
       .transform((value, ctx) => {
         const normalized = value.toLowerCase();
         if (normalized !== "mainnet" && normalized !== "testnet") {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             message: `HYPERLIQUID_NETWORK 仅支持 mainnet 或 testnet: ${value}`,
           });
           return z.NEVER;
@@ -305,42 +325,42 @@ const envSchema = z
   .superRefine((data, ctx) => {
     if (data.GRID_SPACING_MODE === "ABS" && !data.GRID_SPACING) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "GRID_SPACING_MODE=ABS 时必须提供 GRID_SPACING",
         path: ["GRID_SPACING"],
       });
     }
     if (data.GRID_SPACING_MODE === "PERCENT" && !data.GRID_SPACING_PERCENT) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "GRID_SPACING_MODE=PERCENT 时必须提供 GRID_SPACING_PERCENT",
         path: ["GRID_SPACING_PERCENT"],
       });
     }
     if (data.EXCHANGE === "extended" && !data.EXTENDED_API_KEY) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "EXCHANGE=extended 时必须提供 EXTENDED_API_KEY",
         path: ["EXTENDED_API_KEY"],
       });
     }
     if (data.EXCHANGE === "extended" && !data.EXTENDED_L2_PRIVATE_KEY) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "EXCHANGE=extended 时必须提供 EXTENDED_L2_PRIVATE_KEY",
         path: ["EXTENDED_L2_PRIVATE_KEY"],
       });
     }
     if (data.EXCHANGE === "nado" && !data.NADO_PRIVATE_KEY) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "EXCHANGE=nado 时必须提供 NADO_PRIVATE_KEY",
         path: ["NADO_PRIVATE_KEY"],
       });
     }
     if (data.EXCHANGE === "hyperliquid" && !data.HYPERLIQUID_PRIVATE_KEY) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "EXCHANGE=hyperliquid 时必须提供 HYPERLIQUID_PRIVATE_KEY",
         path: ["HYPERLIQUID_PRIVATE_KEY"],
       });
@@ -433,6 +453,7 @@ function loadExchangeConfig(env: EnvValues): ExchangeConfig {
     name: env.EXCHANGE,
     hyperliquid: {
       privateKey: hyperliquidPrivateKey,
+      userAddress: env.HYPERLIQUID_USER_ADDRESS,
       network: env.HYPERLIQUID_NETWORK,
       dex: env.HYPERLIQUID_DEX || undefined,
       minNotional: env.HYPERLIQUID_MIN_NOTIONAL,

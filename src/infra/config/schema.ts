@@ -62,6 +62,8 @@ export interface NadoConfig {
 export interface HyperliquidConfig {
   /** 钱包私钥，用于签名订单 */
   privateKey: string;
+  /** 用于 Info 端点与账户订阅的真实账户地址（主账户或子账户），agent key 场景必须配置 */
+  userAddress?: string;
   /** 网络环境 */
   network: "mainnet" | "testnet";
   /** 可选 DEX 名称（默认为主 DEX） */

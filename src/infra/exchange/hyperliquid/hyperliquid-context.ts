@@ -17,6 +17,7 @@ export interface HyperliquidMarketContext {
 export async function loadHyperliquidMarketContext(params: {
   infoClient: InfoClient;
   symbol: string;
+  /** Info 端点查询使用的账户地址 */
   userAddress: string;
   symbolConverter: SymbolConverter;
   dex?: string;

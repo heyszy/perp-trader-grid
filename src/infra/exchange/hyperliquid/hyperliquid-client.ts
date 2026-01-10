@@ -17,6 +17,7 @@ export interface HyperliquidClients {
   subscriptionClient: SubscriptionClient;
   httpTransport: HttpTransport;
   wsTransport: WebSocketTransport;
+  /** 签名钱包地址（由私钥推导） */
   accountAddress: `0x${string}`;
 }
 

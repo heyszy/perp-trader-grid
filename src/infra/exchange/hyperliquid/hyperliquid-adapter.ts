@@ -56,7 +56,8 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
   private readonly config: HyperliquidConfig;
   private readonly clients: HyperliquidClients;
   private readonly orderIds = new HyperliquidOrderIdStore();
-  private readonly accountAddress: `0x${string}`;
+  // Info 端点与账户订阅使用的用户地址，agent key 场景需显式配置真实账户地址。
+  private readonly userAddress: string;
   // 当前交易对最小下单金额（USD），会在运行时根据报错动态调整。
   private minNotional: Decimal;
   // REST 请求全局限流守卫，避免 429 时继续高频打点。
@@ -70,7 +71,8 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     this.symbol = symbol;
     this.exchangeSymbol = hyperliquidSymbolMapper.toExchangeSymbol(symbol, config.dex);
     this.clients = createHyperliquidClients(config);
-    this.accountAddress = this.clients.accountAddress;
+    // 未配置时回退到签名钱包地址，保持默认行为。
+    this.userAddress = config.userAddress ?? this.clients.accountAddress;
     this.minNotional = config.minNotional ?? Decimal(10);
   }
 
@@ -102,7 +104,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
         loadHyperliquidMarketContext({
           infoClient: this.clients.infoClient,
           symbol: this.symbol,
-          userAddress: this.accountAddress,
+          userAddress: this.userAddress,
           symbolConverter,
           dex: this.config.dex,
         })
@@ -169,14 +171,14 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
         return;
       }
       const orderSub = await this.clients.subscriptionClient.orderUpdates(
-        { user: this.accountAddress },
+        { user: this.userAddress },
         (event) => this.handleOrderUpdates(event, params)
       );
       unsubscribes.push(() => void orderSub.unsubscribe());
 
       if (params.onPositionUpdates) {
         const positionSub = await this.clients.subscriptionClient.clearinghouseState(
-          { user: this.accountAddress, dex: this.config.dex },
+          { user: this.userAddress, dex: this.config.dex },
           (event) => this.handlePositionUpdate(event.clearinghouseState, params)
         );
         unsubscribes.push(() => void positionSub.unsubscribe());
@@ -212,7 +214,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     await this.connect();
     const state = await this.withRateLimit(() =>
       this.clients.infoClient.clearinghouseState({
-        user: this.accountAddress,
+        user: this.userAddress,
         dex: this.config.dex,
       })
     );
@@ -231,7 +233,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     const cloid = this.orderIds.ensureCloid(clientOrderId);
     const response = await this.withRateLimit(() =>
       this.clients.infoClient.orderStatus({
-        user: this.accountAddress,
+        user: this.userAddress,
         oid: cloid,
       })
     );
@@ -249,7 +251,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     await this.connect();
     const openOrders = await this.withRateLimit(() =>
       this.clients.infoClient.openOrders({
-        user: this.accountAddress,
+        user: this.userAddress,
         dex: this.config.dex,
       })
     );
@@ -266,7 +268,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     await this.connect();
     const history = await this.withRateLimit(() =>
       this.clients.infoClient.historicalOrders({
-        user: this.accountAddress,
+        user: this.userAddress,
       })
     );
     return history
@@ -287,7 +289,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     if (notional.lt(this.minNotional)) {
       return {
         status: "REJECTED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: undefined,
         statusReason: "minNotionalPrecheck",
         errorCode: "MIN_NOTIONAL_PRECHECK",
@@ -330,7 +332,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
       const isMinNotional = isHyperliquidMinNotionalError(message);
       return {
         status: "REJECTED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: undefined,
         statusReason: message,
         errorCode: isMinNotional ? "MIN_NOTIONAL_REJECTED" : "EXCHANGE_REJECTED",
@@ -366,7 +368,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     const context = this.getMarketContext();
     const openOrders = await this.withRateLimit(() =>
       this.clients.infoClient.openOrders({
-        user: this.accountAddress,
+        user: this.userAddress,
         dex: this.config.dex,
       })
     );
@@ -507,7 +509,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     }
     const normalizedStatus = normalizeHyperliquidOrderStatus(item.status);
     return {
-      accountId: this.accountAddress,
+      accountId: this.userAddress,
       clientOrderId,
       exchangeOrderId: String(item.order.oid),
       status: normalizedStatus,
@@ -545,7 +547,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     }
     const normalizedStatus = normalizeHyperliquidOrderStatus(params.status);
     return {
-      accountId: this.accountAddress,
+      accountId: this.userAddress,
       clientOrderId,
       exchangeOrderId: String(params.order.oid),
       status: normalizedStatus,
@@ -601,7 +603,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     if (typeof status === "string") {
       return {
         status: "ACKED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: undefined,
         statusReason: status,
         updatedAt: Date.now(),
@@ -610,7 +612,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     if ("error" in status) {
       return {
         status: "REJECTED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: undefined,
         statusReason: status.error,
         errorMessage: status.error,
@@ -620,7 +622,7 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     if ("filled" in status) {
       return {
         status: "FILLED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: String(status.filled.oid),
         updatedAt: Date.now(),
       };
@@ -628,14 +630,14 @@ export class HyperliquidGridExchangeAdapter implements GridExchangeAdapter {
     if ("resting" in status) {
       return {
         status: "ACKED",
-        accountId: this.accountAddress,
+        accountId: this.userAddress,
         exchangeOrderId: String(status.resting.oid),
         updatedAt: Date.now(),
       };
     }
     return {
       status: "ACKED",
-      accountId: this.accountAddress,
+      accountId: this.userAddress,
       exchangeOrderId: undefined,
       statusReason: undefined,
       updatedAt: Date.now(),
