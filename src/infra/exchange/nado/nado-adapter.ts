@@ -36,6 +36,7 @@ import { buildNadoOrderParams, NadoOrderIdStore } from "./nado-order";
 import { nadoSymbolMapper } from "./nado-symbol-mapper";
 import { fromX18, normalizeTimestampMs, toDecimal } from "./nado-utils";
 import { NadoWsManager } from "./nado-ws";
+import { extractRetryAfterMs, isRateLimitError, RateLimitGuard } from "../rate-limit";
 
 /**
  * Nado 交易所适配器实现。
@@ -58,6 +59,8 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
   private readonly wsManager: NadoWsManager;
   private marketContext: NadoMarketContext | null = null;
   private connectPromise: Promise<void> | null = null;
+  // REST 请求全局限流守卫，避免 429 时继续高频打点。
+  private readonly rateLimitGuard = new RateLimitGuard();
 
   constructor(config: NadoConfig, symbol: string) {
     this.symbol = symbol;
@@ -88,11 +91,16 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
    * 初始化市场上下文。
    */
   public async connect(): Promise<void> {
+    if (this.marketContext) {
+      return;
+    }
     if (this.connectPromise) {
       return this.connectPromise;
     }
     this.connectPromise = (async () => {
-      this.marketContext = await loadNadoMarketContext(this.client, this.symbol);
+      this.marketContext = await this.withRateLimit(() =>
+        loadNadoMarketContext(this.client, this.symbol)
+      );
     })();
     try {
       await this.connectPromise;
@@ -214,14 +222,16 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
     this.ensureSymbol(symbol);
     await this.connect();
     const productId = this.getProductId();
-    const summaries = await Promise.all(
-      this.subaccountNames.map((name) =>
+    const summaries = [];
+    for (const name of this.subaccountNames) {
+      const summary = await this.withRateLimit(() =>
         this.client.subaccount.getSubaccountSummary({
           subaccountOwner: this.subaccountOwner,
           subaccountName: name,
         })
-      )
-    );
+      );
+      summaries.push(summary);
+    }
     let net = Decimal(0);
     for (const summary of summaries) {
       const balance = summary.balances.find(
@@ -245,10 +255,12 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
       return null;
     }
     try {
-      const order = await this.client.context.engineClient.getOrder({
-        productId: this.getProductId(),
-        digest,
-      });
+      const order = await this.withRateLimit(() =>
+        this.client.context.engineClient.getOrder({
+          productId: this.getProductId(),
+          digest,
+        })
+      );
       return this.mapEngineOrder(order, clientOrderId);
     } catch (error) {
       // 2020: digest 不存在（已撤单或已完全成交并被清理），视为无订单。
@@ -266,15 +278,17 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
     this.ensureSymbol(symbol);
     await this.connect();
     const productId = this.getProductId();
-    const orders = await Promise.all(
-      this.subaccountNames.map((name) =>
+    const orders = [];
+    for (const name of this.subaccountNames) {
+      const response = await this.withRateLimit(() =>
         this.client.market.getOpenSubaccountOrders({
           productId,
           subaccountOwner: this.subaccountOwner,
           subaccountName: name,
         })
-      )
-    );
+      );
+      orders.push(response);
+    }
     return orders.flatMap((response) => response.orders.map((order) => this.mapEngineOrder(order)));
   }
 
@@ -285,13 +299,15 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
     this.ensureSymbol(query.symbol);
     await this.connect();
     const productId = this.getProductId();
-    const orders = await this.client.market.getHistoricalOrders({
-      productIds: [productId],
-      subaccounts: this.subaccountNames.map((name) => ({
-        subaccountOwner: this.subaccountOwner,
-        subaccountName: name,
-      })),
-    });
+    const orders = await this.withRateLimit(() =>
+      this.client.market.getHistoricalOrders({
+        productIds: [productId],
+        subaccounts: this.subaccountNames.map((name) => ({
+          subaccountOwner: this.subaccountOwner,
+          subaccountName: name,
+        })),
+      })
+    );
     const cutoff = query.sinceMs;
     return orders
       .filter((order) => order.recvTimeSeconds * 1000 >= cutoff)
@@ -331,11 +347,13 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
       subaccountName,
       this.subaccountOwner
     );
-    const result = await this.client.market.placeOrder({
-      id: clientOrderNum,
-      productId: context.productId,
-      order: orderParams,
-    });
+    const result = await this.withRateLimit(() =>
+      this.client.market.placeOrder({
+        id: clientOrderNum,
+        productId: context.productId,
+        order: orderParams,
+      })
+    );
     if (result.data.error) {
       throw new Error(`Nado 下单失败: ${result.data.error}`);
     }
@@ -360,12 +378,14 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
     }
     const subaccountName =
       this.orderIds.resolveSubaccountName(externalId) ?? this.getDefaultSubaccountName();
-    await this.client.market.cancelOrders({
-      productIds: [this.getProductId()],
-      digests: [digest],
-      subaccountOwner: this.subaccountOwner,
-      subaccountName,
-    });
+    await this.withRateLimit(() =>
+      this.client.market.cancelOrders({
+        productIds: [this.getProductId()],
+        digests: [digest],
+        subaccountOwner: this.subaccountOwner,
+        subaccountName,
+      })
+    );
   }
 
   /**
@@ -375,15 +395,15 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
     this.ensureSymbol(symbol);
     await this.connect();
     const productId = this.getProductId();
-    await Promise.all(
-      this.subaccountNames.map((name) =>
+    for (const name of this.subaccountNames) {
+      await this.withRateLimit(() =>
         this.client.market.cancelProductOrders({
           productIds: [productId],
           subaccountOwner: this.subaccountOwner,
           subaccountName: name,
         })
-      )
-    );
+      );
+    }
   }
 
   private getMarketContext(): NadoMarketContext {
@@ -391,6 +411,23 @@ export class NadoGridExchangeAdapter implements GridExchangeAdapter {
       throw new Error("Nado 市场信息未初始化");
     }
     return this.marketContext;
+  }
+
+  /**
+   * 统一封装 REST 调用，遇到 429 时自动进入退避窗口。
+   */
+  private async withRateLimit<T>(action: () => Promise<T>): Promise<T> {
+    await this.rateLimitGuard.wait();
+    try {
+      const result = await action();
+      this.rateLimitGuard.onSuccess();
+      return result;
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        this.rateLimitGuard.onRateLimit(extractRetryAfterMs(error));
+      }
+      throw error;
+    }
   }
 
   private getProductId(): number {

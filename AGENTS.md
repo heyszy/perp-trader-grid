@@ -11,17 +11,14 @@
 - 运行 `npm run typecheck` 检查类型
 - 运行 `npm run format` 格式化代码
 - 运行 `npm run lint` 检查代码风格
-- 每一次代码修改都需要按照实际情况更新 `README.md`
+- `README.md` 告知用户项目的功能和使用方法，每一次新增或修改功能都要按需更新 `README.md` 以帮助用户理解并快速上手应用。项目内部逻辑或架构的调整不应该影响 `README.md`
 - 如果开发中遇到 SDK 相关问题，请反馈，不要直接尝试解决
 - NADO 交易所文档可调用 MCP 服务，Typescript SDK 源码可以查看 '～/Project/perp/refer/nado-typescript-sdk'。
-
-完成 plans/ 中的任务后更新 plans/ 中的计划，标记为完成。
+- 完成 plans/ 中的任务后更新 plans/ 中的计划，标记为完成。
 
 ## 交付与验收
-
 - 重要逻辑变更需说明验证方式与结果。
 - 文档与实现保持一致，避免信息漂移。
 
 ## 提交规范
-
 commit message 使用中文，提交规范参考 [COMMIT_CONVENTION](COMMIT_CONVENTION.md)。

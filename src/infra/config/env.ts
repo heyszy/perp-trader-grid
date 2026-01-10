@@ -229,7 +229,7 @@ function exchangeNameField() {
         }
         return trimmed.toLowerCase();
       },
-      z.enum(["extended", "nado"], "暂不支持交易所")
+      z.enum(["extended", "nado", "hyperliquid"], "暂不支持交易所")
     )
     .default("extended");
 }
@@ -279,6 +279,24 @@ const envSchema = z
     NADO_PRIVATE_KEY: optionalString(),
     NADO_RPC_URL: optionalString().default("https://rpc-gel.inkonchain.com"),
     NADO_SUBACCOUNT_NAMES: optionalString().default("default"),
+    HYPERLIQUID_PRIVATE_KEY: optionalString(),
+    HYPERLIQUID_NETWORK: optionalString()
+      .default("mainnet")
+      .transform((value, ctx) => {
+        const normalized = value.toLowerCase();
+        if (normalized !== "mainnet" && normalized !== "testnet") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `HYPERLIQUID_NETWORK 仅支持 mainnet 或 testnet: ${value}`,
+          });
+          return z.NEVER;
+        }
+        return normalized as "mainnet" | "testnet";
+      }),
+    HYPERLIQUID_DEX: optionalString(),
+    HYPERLIQUID_MIN_NOTIONAL: optionalDecimalField("HYPERLIQUID_MIN_NOTIONAL", {
+      minExclusive: 0,
+    }),
     DB_PATH: optionalString().default("data/perp-grid.db"),
     DEBUG_MARKET_LOG: optionalBooleanField("DEBUG_MARKET_LOG", false),
     BARK_SERVER: optionalString(),
@@ -318,6 +336,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: "EXCHANGE=nado 时必须提供 NADO_PRIVATE_KEY",
         path: ["NADO_PRIVATE_KEY"],
+      });
+    }
+    if (data.EXCHANGE === "hyperliquid" && !data.HYPERLIQUID_PRIVATE_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "EXCHANGE=hyperliquid 时必须提供 HYPERLIQUID_PRIVATE_KEY",
+        path: ["HYPERLIQUID_PRIVATE_KEY"],
       });
     }
   });
@@ -392,13 +417,25 @@ function loadExchangeConfig(env: EnvValues): ExchangeConfig {
     };
   }
   // Nado 私钥已在环境校验阶段保证存在。
-  const nadoPrivateKey = env.NADO_PRIVATE_KEY as string;
+  if (env.EXCHANGE === "nado") {
+    const nadoPrivateKey = env.NADO_PRIVATE_KEY as string;
+    return {
+      name: env.EXCHANGE,
+      nado: {
+        rpcUrl: env.NADO_RPC_URL,
+        privateKey: nadoPrivateKey,
+        subaccountNames: parseSubaccountNames(env.NADO_SUBACCOUNT_NAMES),
+      },
+    };
+  }
+  const hyperliquidPrivateKey = env.HYPERLIQUID_PRIVATE_KEY as string;
   return {
     name: env.EXCHANGE,
-    nado: {
-      rpcUrl: env.NADO_RPC_URL,
-      privateKey: nadoPrivateKey,
-      subaccountNames: parseSubaccountNames(env.NADO_SUBACCOUNT_NAMES),
+    hyperliquid: {
+      privateKey: hyperliquidPrivateKey,
+      network: env.HYPERLIQUID_NETWORK,
+      dex: env.HYPERLIQUID_DEX || undefined,
+      minNotional: env.HYPERLIQUID_MIN_NOTIONAL,
     },
   };
 }

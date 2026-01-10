@@ -1,6 +1,7 @@
 import type { GridExchangeAdapter } from "../core/exchange/adapter";
 import type { AppConfig } from "../infra/config/schema";
 import { createExchangeAdapter } from "../infra/exchange/factory";
+import { NotificationService } from "../infra/notification/notification-service";
 import { GridOrderManager } from "../services/grid/grid-order-manager";
 import type { OrderRecorder } from "../services/recorder/order-recorder";
 import { MarketDataService } from "../services/market-data/market-data-service";
@@ -86,7 +87,14 @@ export function createGridRuntime(config: AppConfig, orderRecorder?: OrderRecord
     },
   ]);
 
-  const orderManager = new GridOrderManager(exchange, marketData, config.grid, orderRecorder);
+  const notifier = new NotificationService(config.notification);
+  const orderManager = new GridOrderManager(
+    exchange,
+    marketData,
+    config.grid,
+    orderRecorder,
+    notifier
+  );
 
   return new GridRuntime(exchange, marketData, orderManager);
 }

@@ -35,6 +35,18 @@ function maskConfig(config: AppConfig): AppConfig {
       },
     };
   }
+  if (config.exchange.name === "hyperliquid" && config.exchange.hyperliquid) {
+    return {
+      ...config,
+      exchange: {
+        ...config.exchange,
+        hyperliquid: {
+          ...config.exchange.hyperliquid,
+          privateKey: "***",
+        },
+      },
+    };
+  }
   return config;
 }
 

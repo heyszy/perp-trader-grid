@@ -3,9 +3,9 @@ import type { GridSpacingMode } from "../../core/grid/types";
 
 /**
  * 支持的交易所名称。
- * 当前已接入 extended，nado 配置预留用于后续对接。
+ * 当前已接入 extended、nado、hyperliquid。
  */
-export type ExchangeName = "extended" | "nado";
+export type ExchangeName = "extended" | "nado" | "hyperliquid";
 
 /**
  * 网格配置，包含策略与风控所需的全部参数。
@@ -57,12 +57,27 @@ export interface NadoConfig {
 }
 
 /**
+ * Hyperliquid 账户与网络配置。
+ */
+export interface HyperliquidConfig {
+  /** 钱包私钥，用于签名订单 */
+  privateKey: string;
+  /** 网络环境 */
+  network: "mainnet" | "testnet";
+  /** 可选 DEX 名称（默认为主 DEX） */
+  dex?: string;
+  /** 最小下单名义价值（USD），默认 10 */
+  minNotional?: Decimal;
+}
+
+/**
  * 交易所配置。
  */
 export interface ExchangeConfig {
   name: ExchangeName;
   extended?: ExtendedConfig;
   nado?: NadoConfig;
+  hyperliquid?: HyperliquidConfig;
 }
 
 /**

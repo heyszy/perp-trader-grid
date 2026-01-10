@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@nadohq/client": "0.1.0-alpha.43",
+    "@nktkas/hyperliquid": "^0.30.2",
     "@shenzheyu/extended": "0.0.1-alpha.0",
     "better-sqlite3": "^12.5.0",
     "bignumber.js": "^9.3.1",

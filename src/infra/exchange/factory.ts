@@ -1,6 +1,7 @@
 import type { GridExchangeAdapter } from "../../core/exchange/adapter";
 import type { AppConfig } from "../config/schema";
 import { ExtendedGridExchangeAdapter } from "./extended/extended-adapter";
+import { HyperliquidGridExchangeAdapter } from "./hyperliquid/hyperliquid-adapter";
 import { NadoGridExchangeAdapter } from "./nado/nado-adapter";
 
 /**
@@ -22,6 +23,13 @@ export function createExchangeAdapter(config: AppConfig): GridExchangeAdapter {
       throw new Error("未提供 Nado 交易所配置");
     }
     return new NadoGridExchangeAdapter(nadoConfig, config.grid.symbol);
+  }
+  if (config.exchange.name === "hyperliquid") {
+    const hyperliquidConfig = config.exchange.hyperliquid;
+    if (!hyperliquidConfig) {
+      throw new Error("未提供 Hyperliquid 交易所配置");
+    }
+    return new HyperliquidGridExchangeAdapter(hyperliquidConfig, config.grid.symbol);
   }
   throw new Error(`暂不支持交易所: ${config.exchange.name}`);
 }

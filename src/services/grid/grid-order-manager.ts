@@ -14,6 +14,7 @@ import type { GridConfig } from "../../infra/config/schema";
 import type { OrderRecordInput, OrderRecorder } from "../recorder/order-recorder";
 import { Decimal } from "../../shared/number";
 import type { MarketDataService } from "../market-data/market-data-service";
+import type { NotificationService } from "../../infra/notification/notification-service";
 
 /**
  * 网格订单管理器负责将行情快照转化为下单/撤单行为。
@@ -24,6 +25,7 @@ export class GridOrderManager {
   private readonly marketData: MarketDataService;
   private readonly config: GridConfig;
   private readonly recorder?: OrderRecorder;
+  private readonly notifier?: NotificationService;
   private readonly strategy: GridStrategy;
   private readonly state: GridState;
   private readonly orderIdPrefix: string;
@@ -60,17 +62,21 @@ export class GridOrderManager {
   private lastMaintenanceAt: number | null = null;
   // 最近一次对账执行时间
   private lastReconcileAt: number | null = null;
+  // 最小下单金额不足时，记录阻断价格（该价及更低价不再下单）。
+  private minNotionalBlockPrice: Decimal | null = null;
 
   constructor(
     exchange: GridExchangeAdapter,
     marketData: MarketDataService,
     config: GridConfig,
-    recorder?: OrderRecorder
+    recorder?: OrderRecorder,
+    notifier?: NotificationService
   ) {
     this.exchange = exchange;
     this.marketData = marketData;
     this.config = config;
     this.recorder = recorder;
+    this.notifier = notifier;
     this.strategy = new GridStrategy({
       mode: config.spacingMode,
       spacing: config.spacing,
@@ -560,6 +566,9 @@ export class GridOrderManager {
     if (!level.targetSide) {
       return null;
     }
+    if (this.shouldSkipByMinNotional(level)) {
+      return null;
+    }
     if (this.shouldSkipPostOnlyOrder(level)) {
       return null;
     }
@@ -599,9 +608,21 @@ export class GridOrderManager {
         exchangeOrderId: result.exchangeOrderId,
         timeInForce: "GTT",
       });
+      this.updateMinNotionalBlock(level.price, result.errorCode);
+      if (result.status === "REJECTED") {
+        const reason = this.describeRejectedReason(result.errorCode, result.errorMessage);
+        this.notifyOrderFailure({
+          title: "下单被拒绝",
+          body: this.buildOrderFailureBody(pendingOrder, reason),
+        });
+      }
       return updated;
     } catch (error) {
       console.warn("下单失败", error);
+      this.notifyOrderFailure({
+        title: "下单失败",
+        body: this.buildOrderFailureBody(pendingOrder, this.formatErrorReason(error)),
+      });
       const rejected: GridOrderState = {
         ...pendingOrder,
         status: "REJECTED",
@@ -610,6 +631,86 @@ export class GridOrderManager {
       this.upsertOrderState(rejected);
       return rejected;
     }
+  }
+
+  /**
+   * 组装下单失败通知内容。
+   */
+  private buildOrderFailureBody(order: GridOrderState, reason: string): string {
+    return [
+      `交易对: ${this.config.symbol}`,
+      `方向: ${order.side}`,
+      `价格: ${order.price.toString()}`,
+      `数量: ${order.quantity.toString()}`,
+      `原因: ${reason}`,
+    ].join("\n");
+  }
+
+  /**
+   * 解析拒单原因，便于用户快速定位问题。
+   */
+  private describeRejectedReason(errorCode?: string, errorMessage?: string): string {
+    if (errorCode === "MIN_NOTIONAL_PRECHECK") {
+      return errorMessage
+        ? `最小下单金额不足（预检）: ${errorMessage}`
+        : "最小下单金额不足（预检）";
+    }
+    if (errorCode === "MIN_NOTIONAL_REJECTED") {
+      return errorMessage
+        ? `最小下单金额不足（交易所拒绝）: ${errorMessage}`
+        : "最小下单金额不足（交易所拒绝）";
+    }
+    if (errorMessage) {
+      return errorMessage;
+    }
+    return "未知原因";
+  }
+
+  /**
+   * 将未知异常转为可读提示。
+   */
+  private formatErrorReason(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (typeof error === "string") {
+      return error;
+    }
+    return "未知错误";
+  }
+
+  /**
+   * 发送下单失败通知，失败时仅记录日志。
+   */
+  private notifyOrderFailure(payload: { title: string; body: string }): void {
+    if (!this.notifier) {
+      return;
+    }
+    void this.notifier.notify(payload).catch((error) => {
+      console.warn("发送通知失败", error);
+    });
+  }
+
+  /**
+   * 根据最小名义金额不足的拒单信息，更新阻断价格。
+   */
+  private updateMinNotionalBlock(price: Decimal, errorCode?: string): void {
+    if (errorCode !== "MIN_NOTIONAL_PRECHECK" && errorCode !== "MIN_NOTIONAL_REJECTED") {
+      return;
+    }
+    if (!this.minNotionalBlockPrice || price.gt(this.minNotionalBlockPrice)) {
+      this.minNotionalBlockPrice = price;
+    }
+  }
+
+  /**
+   * 若价格不满足最小名义金额约束，则跳过该档及更低价档位下单。
+   */
+  private shouldSkipByMinNotional(level: GridLevel): boolean {
+    if (!this.minNotionalBlockPrice) {
+      return false;
+    }
+    return level.price.lte(this.minNotionalBlockPrice);
   }
 
   /**
